@@ -15,7 +15,7 @@ export function useAuth() {
     return null;
   });
 
-  const [csrfToken, setCsrfToken] = useState(""); // State to store CSRF token
+  const [csrfToken, setCsrfToken] = useState("");
 
   // Function to fetch CSRF token
   async function fetchCsrfToken() {
@@ -47,7 +47,7 @@ export function useAuth() {
           "csrf-token": csrfToken
         },
         credentials: 'include',
-        body: JSON.stringify({ userId: parsedUser.userid }) // Send userId in the request body
+        body: JSON.stringify({ userId: parsedUser.userid })
       });
 
       if (response.ok) {
@@ -60,7 +60,6 @@ export function useAuth() {
       } else {
         console.error('Failed to refresh access token:', response.statusText);
         if (response.status === 403) {
-          // If the server returns a 403 status, log out the user
           setLoggedUser(null);
           localStorage.removeItem("app-user");
         }
@@ -68,7 +67,7 @@ export function useAuth() {
     } catch (error) {
       console.error('Error refreshing access token:', error);
       if (retries > 0) {
-        setTimeout(() => refreshAccessToken(parsedUser, retries - 1), 2000); // Retry with exponential backoff
+        setTimeout(() => refreshAccessToken(parsedUser, retries - 1), 2000);
       } else {
         setLoggedUser(null);
         localStorage.removeItem("app-user");
@@ -76,12 +75,28 @@ export function useAuth() {
     }
   }
 
-  // Fetch CSRF token on initial mount
+  // Function to check and create a refresh token if not present
+  async function checkAndCreateRefreshToken() {
+    const refreshToken = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('refreshToken='))
+      ?.split('=')[1];
+
+    if (!refreshToken) {
+      console.log('No refresh token found in cookies, creating one...');
+      const storedUser = localStorage.getItem("app-user");
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        await refreshAccessToken(parsedUser);
+      }
+    }
+  }
+
   useEffect(() => {
     fetchCsrfToken();
+    checkAndCreateRefreshToken(); // Check for refresh token on mount
   }, []);
 
-  // Check and refresh tokens periodically
   useEffect(() => {
     const interval = setInterval(async () => {
       const storedUser = localStorage.getItem("app-user");
@@ -94,14 +109,14 @@ export function useAuth() {
           const { exp: accessTokenExp } = jwtDecode(accessToken);
           const accessTokenMinutesLeft = (accessTokenExp - now) / 60;
 
-          if (accessTokenMinutesLeft <= 1) { // If the access token is about to expire in the next minute
+          if (accessTokenMinutesLeft <= 1) {
             await refreshAccessToken(parsedUser);
           }
         }
       }
     }, 60 * 1000); // Check every minute
 
-    return () => clearInterval(interval);
+    return () => clearInterval(interval); // Cleanup on unmount
   }, [csrfToken]);
 
   return { loggedUser, setLoggedUser, csrfToken };
