@@ -30,7 +30,7 @@ mongoose.connect(process.env.MONGO_URI)
 const app = express();
 app.use(helmet());
 app.use(cors({
-  origin: 'http://localhost:5173', // Allow requests from this origin
+  origin: 'https://thegalwinapp-208f66c28985.herokuapp.com/', // Allow requests from this origin
   credentials: true, // Allow cookies and other credentials to be sent
   allowedHeaders: ['Content-Type', 'csrf-token', 'Authorization'], // Allow csrf-token and Authorization headers
 }));
@@ -174,10 +174,10 @@ app.post('/login', async (req, res) => {
         console.log('Password match successful');
 
         // Generate access token (expires in 15 minutes for production)
-        const token = jwt.sign({ email: user.email, userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1m' });
+        const token = jwt.sign({ email: user.email, userId: user._id }, process.env.JWT_SECRET, { expiresIn: '15m' });
 
-         // Generate refresh token and save it to the database (expires in 7 days for production)
-        const expiryDate = new Date(Date.now() + 5 * 60 * 1000); // 2 minutes from now
+        // Generate refresh token and save it to the database (expires in 30 days)
+        const expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
         const newRefreshToken = new refreshTokenModel({
           token: crypto.randomBytes(40).toString('hex'),
           userId: user._id,
@@ -193,7 +193,7 @@ app.post('/login', async (req, res) => {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'Strict',
-          maxAge: 5 * 60 * 1000 // 2 minutes in milliseconds
+          maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days in milliseconds
         });
 
         res.send({
@@ -219,7 +219,8 @@ app.post('/login', async (req, res) => {
 });
 
 
-// Endpoint to refresh the access token bu storedToken.remove is not a function hatasi veren
+
+// Endpoint to refresh the access token
 app.post('/refresh-token', async (req, res) => {
   console.log('Received cookies:', req.cookies);
   console.log('Req Body:', req.body);
@@ -238,19 +239,19 @@ app.post('/refresh-token', async (req, res) => {
       return res.status(403).send({ message: "Invalid refresh token" });
     }
 
-    // Generate a new access token (expires in 1 minute for testing)
+    // Generate a new access token (expires in 15 minutes for production)
     const newToken = jwt.sign(
       { email: storedToken.email, userId: storedToken.userId },
       process.env.JWT_SECRET,
-      { expiresIn: '1m' }
+      { expiresIn: '15m' }
     );
     console.log('Generated new access token:', newToken);
 
     // Check if the refresh token is close to expiration, if so, generate a new one
     const now = Date.now();
     const timeRemaining = storedToken.expiryDate - now;
-    if (timeRemaining < 2 * 60 * 1000) { // Less than 1 minute remaining
-      const newExpiryDate = new Date(now + 5 * 60 * 1000); // Extend by 2 more minutes
+    if (timeRemaining < 7 * 24 * 60 * 60 * 1000) { // Less than 7 days remaining
+      const newExpiryDate = new Date(now + 30 * 24 * 60 * 60 * 1000); // Extend by 30 more days
       const newRefreshToken = new refreshTokenModel({
         token: crypto.randomBytes(40).toString('hex'),
         userId: storedToken.userId,
@@ -266,7 +267,7 @@ app.post('/refresh-token', async (req, res) => {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'Strict',
-        maxAge: 5 * 60 * 1000 // 2 minutes in milliseconds
+        maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days in milliseconds
       });
 
       res.send({ token: newToken });
